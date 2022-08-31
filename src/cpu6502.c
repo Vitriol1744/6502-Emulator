@@ -4,10 +4,31 @@
 #include "cpu6502.h"
 
 #include <string.h>
+#include <stdio.h>
 
 typedef word_t opcode_t;
 
-byte_t cpu6502_Read(cpu6502_t*, word_t);
+static const byte_t cycles[256] =
+{
+    7,6,2,8,3,3,5,5,3,2,2,2,4,4,6,6,
+    2,5,2,8,4,4,6,6,2,4,2,7,5,5,7,7,
+    6,6,2,8,3,3,5,5,4,2,2,2,4,4,6,6,
+    2,5,2,8,4,4,6,6,2,4,2,7,5,5,7,7,
+    6,6,2,8,3,3,5,5,3,2,2,2,3,4,6,6,
+    2,5,2,8,4,4,6,6,2,4,2,7,5,5,7,7,
+    6,6,2,8,3,3,5,5,4,2,2,2,5,4,6,6,
+    2,5,2,8,4,4,6,6,2,4,2,7,5,5,7,7,
+    2,6,2,6,3,3,3,3,2,2,2,2,4,4,4,4,
+    2,6,2,6,4,4,4,4,2,5,2,5,5,5,5,5,
+    2,6,2,6,3,3,3,3,2,2,2,2,4,4,4,4,
+    2,5,2,5,4,4,4,4,2,4,2,5,4,4,4,4,
+    2,6,2,8,3,3,5,5,2,2,2,2,4,4,6,6,
+    2,5,2,8,4,4,6,6,2,4,2,7,5,5,7,7,
+    2,6,2,8,3,3,5,5,2,2,2,2,4,4,6,6,
+    2,5,2,8,4,4,6,6,2,4,2,7,5,5,7,7
+};
+
+byte_t cpu6502_ReadByte(cpu6502_t*, word_t);
 byte_t cpu6502_FetchByte(cpu6502_t*);
 void cpu6502_Execute(cpu6502_t*, opcode_t);
 
@@ -22,8 +43,8 @@ void cpu6502_Reset(cpu6502_t* this)
     this->X = 0;
     this->Y = 0;
 
-    uint16_t PC_lo = cpu6502_Read(this, 0xFFFC);
-    uint16_t PC_hi = cpu6502_Read(this, 0xFFFD);
+    uint16_t PC_lo = cpu6502_ReadByte(this, 0xFFFC);
+    uint16_t PC_hi = cpu6502_ReadByte(this, 0xFFFD);
 
     this->S = 0xFD;
     this->PC = (PC_hi << 8) | PC_lo;
@@ -32,7 +53,7 @@ void cpu6502_Reset(cpu6502_t* this)
     this->C = this->I = this->D = this->B = this->V = this->N;
     this->Z = this->U = 1;
 
-    this->cycles = 8;
+    this->counter = 8;
 }
 
 void cpu6502_Run(cpu6502_t* this)
@@ -43,17 +64,39 @@ void cpu6502_Run(cpu6502_t* this)
         opcode = cpu6502_FetchByte(this);
 
         cpu6502_Execute(this, opcode);
+        this->counter -= cycles[opcode];
+
+        if (this->counter <= 0)
+        {
+            this->counter = 8;
+        }
     }
 }
 
-byte_t cpu6502_Read(cpu6502_t* this, word_t address)
+byte_t cpu6502_ReadByte(cpu6502_t* this, word_t address)
 {
-    return bus_Read(this->bus, address);
+    byte_t ret = bus_ReadByte(this->bus, address);
+
+    return ret;
+}
+void cpu6502_WriteByte(cpu6502_t* this, byte_t data, word_t address)
+{
+    bus_WriteByte(this->bus, data, address);
+}
+void cpu6502_WriteWord(cpu6502_t* this, word_t data, word_t address)
+{
+    cpu6502_WriteByte(this, data & 0xFF, address);
+    cpu6502_WriteByte(this, data >> 8, address + 1);
 }
 byte_t cpu6502_FetchByte(cpu6502_t* this)
 {
-    byte_t ret = cpu6502_Read(this, this->PC++);
-    this->cycles--;
+    byte_t ret = cpu6502_ReadByte(this, this->PC++);
+
+    return ret;
+}
+word_t cpu6502_FetchWord(cpu6502_t* this)
+{
+    word_t ret = cpu6502_FetchByte(this) | (cpu6502_FetchByte(this) << 8);
 
     return ret;
 }
@@ -70,7 +113,21 @@ void cpu6502_Execute(cpu6502_t* this, opcode_t opcode)
         case 0x79:
         case 0x61:
         case 0x71:
+        {
+            word_t fetched = cpu6502_FetchByte(this);
 
+            // Add is performed in 16-bit domain for emulation to capture any
+            // carry bit, which will exist in bit 8 of the 16-bit word
+            word_t temp = (uint16_t)this->A + (uint16_t)fetched + (uint16_t) this->C;
+
+            this->C = temp > 255;
+            this->Z = (temp & 0x00FF) == 0;
+            this->V = (~((uint16_t)this->A ^ (uint16_t)fetched) & ((uint16_t)this->A ^ (uint16_t)temp)) & 0x0080;
+            this->N = temp & 0x80;
+            this->A = temp & 0x00FF;
+
+            break;
+        }
             // AND
         case 0x29:
         case 0x25:
@@ -188,10 +245,17 @@ void cpu6502_Execute(cpu6502_t* this, opcode_t opcode)
 
             // JSR
         case 0x20:
+        {
+            word_t subroutine_address = cpu6502_FetchWord(this);
+            cpu6502_WriteWord(this, this->PC - 1, this->S);
+
+            this->PC = subroutine_address;
             break;
+        }
             // LDA
         case 0xA9:
         {
+            printf("LDA\n");
             this->A = cpu6502_FetchByte(this);
             this->Z = (this->A == 0);
             this->N = (this->A & 0xb10000000) > 0;

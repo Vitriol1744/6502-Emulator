@@ -7,15 +7,15 @@
 
 void bus_Initialize(bus_t* this)
 {
-    this->memory = malloc(0x200000);
+    this->memory = malloc(0xffff);
 }
 
-byte_t bus_Read(bus_t* this, word_t address)
+byte_t bus_ReadByte(bus_t* this, word_t address)
 {
     return this->memory[address];
 }
 
-void bus_Write(bus_t* this, byte_t data, word_t address)
+void bus_WriteByte(bus_t* this, byte_t data, word_t address)
 {
     this->memory[address] = data;
 }

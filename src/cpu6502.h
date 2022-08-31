@@ -38,7 +38,7 @@ typedef struct
     byte_t V: 1; // Overflow
     byte_t N: 1; // Negative
 
-    uint32_t cycles;
+    uint32_t counter;
     bus_t* bus;
 } cpu6502_t;
 

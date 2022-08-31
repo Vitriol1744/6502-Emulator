@@ -9,10 +9,10 @@ void load_program(bus_t* bus, void* machine_code, size_t size)
 
     while (size > 0)
     {
-        bus_Write(bus, *ptr++, address++);
+        bus_WriteByte(bus, *ptr++, address++);
         size--;
     }
-    printf("0xFFFC: %x, 0xFFFD: %x", bus_Read(bus, 0xFFFC), bus_Read(bus, 0xFFFD));
+    printf("0xFFFC: %x, 0xFFFD: %x", bus_ReadByte(bus, 0xFFFC), bus_ReadByte(bus, 0xFFFD));
 }
 
 int main()
@@ -21,7 +21,8 @@ int main()
 
     byte_t program[] =
     {
-        0xA9, 0x01
+        0xA9, 0x01, // LDA 0x01
+        0x20, 0xFC, 0xFF // JSR 0xFFFC
     };
 
     bus_t bus;
