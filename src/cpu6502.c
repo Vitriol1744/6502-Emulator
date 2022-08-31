@@ -207,6 +207,10 @@ void cpu6502_Execute(cpu6502_t* this, opcode_t opcode)
             word_t hi = cpu6502_ReadByte(this, ptr + this->X + 1) & 0x00FF;
 
             this->A &= cpu6502_ReadByte(this, (hi << 8) | lo);
+            this->Z = this->A == 0;
+            this->N = (this->A & 0xb10000000) > 0;
+
+            break;
         }
         // Indirect, Y
         case 0x31:
@@ -217,6 +221,10 @@ void cpu6502_Execute(cpu6502_t* this, opcode_t opcode)
             word_t hi = cpu6502_ReadByte(this, ptr + this->Y + 1) & 0x00FF;
 
             this->A &= cpu6502_ReadByte(this, (hi << 8) | lo);
+            this->Z = this->A == 0;
+            this->N = (this->A & 0xb10000000) > 0;
+
+            break;
         }
 
         // ASL
@@ -234,35 +242,32 @@ void cpu6502_Execute(cpu6502_t* this, opcode_t opcode)
         case 0x1E:
 
         // BCC
-        case 0x90:
+        case 0x90: if (this->C == 0) this->PC += cpu6502_FetchByte(this); break;
 
         // BCS
-        case 0xB0:
+        case 0xB0: if (this->C != 0) this->PC += cpu6502_FetchByte(this); break;
 
         // BIT
         case 0x24:
         case 0x2C:
 
         // BMI
-        case 0x30:
+        case 0x30: if (this->N != 0) this->PC += cpu6502_FetchByte(this); break;
 
         // BNE
-        case 0xD0:
+        case 0xD0: if (this->Z == 0) this->PC += cpu6502_FetchByte(this); break;
 
         // BPL
-        case 0x10:
-            if (this->N) this->PC++;
-            else ;
-            break;
+        case 0x10: if (this->N == 0) this->PC += cpu6502_FetchByte(this); break;
 
         // BRK
         case 0x00:
 
         // BVC
-        case 0x50:
+        case 0x50: if (this->V == 0) this->PC += cpu6502_FetchByte(this); break;
 
         // BVS
-        case 0x70:
+        case 0x70: if (this->V != 0) this->PC += cpu6502_FetchByte(this); break;
 
         // CLC
         case 0x18: this->C = 0; break;
@@ -297,16 +302,74 @@ void cpu6502_Execute(cpu6502_t* this, opcode_t opcode)
         case 0xCC:
 
         // DEC
+        // Zero Page
         case 0xC6:
+        {
+            word_t address = cpu6502_FetchByte(this);
+            word_t value = cpu6502_ReadByte(this, address) - 1;
+            cpu6502_WriteByte(this, value, address);
+
+            this->Z = value == 0;
+            this->N = (value & 0xb10000000) > 0;
+
+            break;
+        }
+        // Zero Page, X
         case 0xD6:
+        {
+            word_t address = cpu6502_FetchByte(this) + this->X;
+            word_t value = cpu6502_ReadByte(this, address) - 1;
+            cpu6502_WriteByte(this, value, address);
+
+            this->Z = value == 0;
+            this->N = (value & 0xb10000000) > 0;
+
+            break;
+        }
+        // Absolute
         case 0xCE:
+        {
+            word_t address = cpu6502_FetchWord(this);
+            word_t value = cpu6502_ReadByte(this, address) - 1;
+            cpu6502_WriteByte(this, value, address);
+
+            this->Z = value == 0;
+            this->N = (value & 0xb10000000) > 0;
+
+            break;
+        }
+        // Absolute, X
         case 0xDE:
+        {
+            word_t address = cpu6502_FetchWord(this) + this->X;
+            word_t value = cpu6502_ReadByte(this, address) - 1;
+            cpu6502_WriteByte(this, value, address);
+
+            this->Z = value == 0;
+            this->N = (value & 0xb10000000) > 0;
+
+            break;
+        }
 
         // DEX
         case 0xCA:
+        {
+            this->X--;
+            this->Z = this->X == 0;
+            this->N = (this->X & 0xb10000000) > 0;
+
+            break;
+        }
 
         // DEY
         case 0x88:
+        {
+            this->Y--;
+            this->Z = this->Y == 0;
+            this->N = (this->Y & 0xb10000000) > 0;
+
+            break;
+        }
 
         // EOR
         // Immediate Mode
@@ -318,6 +381,7 @@ void cpu6502_Execute(cpu6502_t* this, opcode_t opcode)
 
             break;
         }
+        // Zero Page
         case 0x45:
         {
             this->A ^= cpu6502_ReadByte(this, cpu6502_FetchByte(this));
@@ -326,18 +390,99 @@ void cpu6502_Execute(cpu6502_t* this, opcode_t opcode)
 
             break;
         }
+        // Zero Page, X
         case 0x55:
+        {
+            this->A ^= cpu6502_ReadByte(this, cpu6502_FetchByte(this) + this->X);
+            this->Z = this->A == 0;
+            this->N = (this->A & 0xb10000000) > 0;
+
+            break;
+        }
+        // Absolute
         case 0x4D:
+        {
+            this->A ^= cpu6502_ReadByte(this, cpu6502_FetchWord(this));
+            this->Z = this->A == 0;
+            this->N = (this->A & 0xb10000000) > 0;
+
+            break;
+        }
+        // Absolute, X
         case 0x5D:
+        {
+            this->A ^= cpu6502_ReadByte(this, cpu6502_FetchWord(this) + this->X);
+            this->Z = this->A == 0;
+            this->N = (this->A & 0xb10000000) > 0;
+
+            break;
+        }
+        // Absolute, Y
         case 0x59:
+        {
+            this->A ^= cpu6502_ReadByte(this, cpu6502_FetchWord(this) + this->Y);
+            this->Z = this->A == 0;
+            this->N = (this->A & 0xb10000000) > 0;
+
+            break;
+        }
+        // Indirect, X
         case 0x41:
+        {
+
+        }
+        // Indirect, Y
         case 0x51:
 
         // INC
+        // Zero Page
         case 0xE6:
+        {
+            word_t address = cpu6502_FetchByte(this);
+            byte_t value = cpu6502_ReadByte(this, address) + 1;
+            cpu6502_WriteByte(this, value, address);
+
+            this->Z = value == 0;
+            this->N = (value & 0xb10000000) > 0;
+
+            break;
+        }
+        // Zero Page, X
         case 0xF6:
+        {
+            word_t address = cpu6502_FetchByte(this) + this->X;
+            byte_t value = cpu6502_ReadByte(this, address) + 1;
+            cpu6502_WriteByte(this, value, address);
+
+            this->Z = value == 0;
+            this->N = (value & 0xb10000000) > 0;
+
+            break;
+        }
+        // Absolute
         case 0xEE:
+        {
+            word_t address = cpu6502_FetchWord(this);
+            byte_t value = cpu6502_ReadByte(this, address) + 1;
+            cpu6502_WriteByte(this, value, address);
+
+            this->Z = value == 0;
+            this->N = (value & 0xb10000000) > 0;
+
+            break;
+        }
+        // Absolute, X
         case 0xFE:
+        {
+            word_t address = cpu6502_FetchWord(this) + this->X;
+            byte_t value = cpu6502_ReadByte(this, address) + 1;
+            cpu6502_WriteByte(this, value, address);
+
+            this->Z = value == 0;
+            this->N = (value & 0xb10000000) > 0;
+
+            break;
+        }
 
         // INX
         case 0xE8:
